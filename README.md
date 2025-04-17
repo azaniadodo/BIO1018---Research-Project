@@ -295,6 +295,7 @@ ggplot(KOvsWT_tb, aes(x = log2FoldChange, y = -log10(padj))) +
 ```
 
 ####  For Comparator Dataset
+
 **Replicate procedures in section 5, making minor variations to align with he supplied data.**
 - Account for factors of  week and genotype (rather than individual and genotype) during data normalisation and variance analysis steps
 - Obtain DGE results for and visualise comparisons of KO-2 vs WT-2, **and** R47H vs WT-2 after running DESeq
@@ -440,6 +441,7 @@ ggplot(R47HvsWT2_tb, aes(x = log2FoldChange, y = -log10(padj))) +
   ylab("-log10 adjusted p-value") +
   theme(plot.title = element_text(size = rel(1.5), hjust = 0.5),
         axis.title = element_text(size = rel(1.25))) 
+
 ```
 
 ## 6. Gene Data Filtering
@@ -486,8 +488,8 @@ semi_join(x= KOvsWT_justgenes, y=DAM_genes)
 semi_join(x= KOvsWT_justgenes_final, y=DAM_genes) 
 #5 of the DAM genes are either upregulated/downregulated in the Original dataset and the comparator dataset and  significantly in  both datasets
 ```
-### **Replicate procedures in section 6 for Comparison 2 (KO vs WT and R47H vs WT-2)**
 
+### **Replicate procedures in section 6 for Comparison 2 (KO vs WT and R47H vs WT-2)**
 Comparator Code:
 ```
 KOvsWTvsR47H_joined_tb <- full_join(x= KOvsWT_significant, y= R47HvsWT2_annotated, join_by(gene)) %>% na.omit(KOvsWTvsR47H_joined_tb)
@@ -530,6 +532,7 @@ semi_join(x= KOvsWTvsR47H_justgenes_final, y=DAM_genes)
 #2 of the DAM genes are either upregulated/downregulated in the Original dataset and the variant dataset and  significantly in  both datasets
 
 ```
+
 ## 7. Functional Enrichment Analysis
 To distinguish which pathways or gene networks the significantly differentially expressed genes were involved in, and their role in the disease phenotype, a functional enrichment analysis, also known as a gene-set enrichment analysis or overrepresentation analysis, was performed on the two final filtered datasets using gProfiler’s g:GOSt tool. 
 Each input list of significantly differentially expressed genes was mapped to functional data sources — Gene Ontology: Biological Processes (GO: BP), KEGG, Reactome and WikiPathways — and statistically significantly enriched biological pathways and processes were identified 
