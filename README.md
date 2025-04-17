@@ -295,19 +295,153 @@ ggplot(KOvsWT_tb, aes(x = log2FoldChange, y = -log10(padj))) +
 ```
 
 ####  For Comparator Dataset
-Replicate procedures in section 5, making minor variations to align with he supplied data.
+
+**Replicate procedures in section 5, making minor variations to align with he supplied data.**
 - Account for factors of  week and genotype (rather than individual and genotype) during data normalisation and variance analysis steps
 - Obtain DGE results for and visualise comparisons of KO-2 vs WT-2, **and** R47H vs WT-2 after running DESeq
 - **Optional**: Obtain DGE analysis results, Top 30 Most Significantly Differentially Expressed genes for the KO-2 vs R47H comparison and visualise as a DGE Heatmap for further analysis and understanding of gene variant effects
 
+        rlog.dge2C <- rld2[top30_genes_KO2vsR47H ,c(1:2,4:5,7:8)] %>% assay
+          pheatmap(rlog.dge2C, scale="row",  main = "Differential Gene Expression KO-2 vs R47H (row-based z-score)")
+  
+Comparator Code:
 ```
-#Code for generating DGE heatmaps that only show specific comparison data
+counts2 <- read.table("featurecounts_comparator.txt", header = TRUE)
+row.names(counts2) <- counts2$Geneid
+counts2 <- counts2[ , -c(1:6) ]
+
+orig_names2 <- names(counts2)
+names(counts2) <- gsub("(pMac)(_week[7-9])(_KO|_WT|_R47H)(_.*)" , "\\1\\2\\3" , orig_names2)
+
+metadata2 <- data.frame(genotype=gsub("(pMac_)(week[7-9]_)(WT|KO|R47H)", "\\3", names(counts2)), row.names = names(counts2))
+metadata2$week <-gsub("(pMac_week)([7-9])(_KO|_WT|_R47H)", "\\2", names(counts2)) #adding a column for week number
+
+dds2 <- DESeqDataSetFromMatrix(countData = counts2, colData = metadata2, design = ~ week + genotype) #accounting for both factors
+colData(dds2) %>% head
+colData(dds2)
+assay(dds2, "counts" ) %>% head
+dds2$genotype <- factor(dds2$genotype, levels = c("WT","KO","R47H"))
+str(dds2$genotype) # added just to check the WT was successfully made to be the reference
+
+# Check number of rows (i.e number of genes) and remove rows/genes where there are zero counts in every sample
+dim(dds2)
+dim(dds2[rowSums(counts(dds2)) > 0, ])
+dds2 <- dds2[rowSums(counts(dds2)) > 0, ]
+
+# Perform a regularised-logarithm transformation of the count data to make it more homoskedastic
+rld2 <- rlog(dds2, blind=TRUE)
+
+# Compare counts in original DESeqDataSet object (dds) with transformed DESeqDataSet object (rld)
+assay(dds2) %>% head
+assay(rld2) %>% head
+
+# Create a PCA plot
+p <-plotPCA(rld2, intgroup=c("genotype","week")) + geom_text_repel(aes(label=name), size=2) 
+p$layers[[1]]$aes_params$size <- 1
+p + guides(color=guide_legend(override.aes = list(size =3))) #not sure if this looks much better and the legend looks strange
+
+# Create a hierarchical clustering plot
+sampleDists <- dist(t(assay(rld2)))
+sampleDistMatrix <- as.matrix( sampleDists )
+rownames(sampleDistMatrix) <- paste(rld2$genotype, rld2$week,sep = "-")
+colnames(sampleDistMatrix) <- paste(rld2$genotype, rld2$week,sep = "-") #added column names to help me interpret the plot better
+colors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+pheatmap(sampleDistMatrix,
+         clustering_distance_rows = sampleDists,
+         clustering_distance_cols = sampleDists,
+         col = colors)
+
+# Run the differential expression pipeline on the raw counts
+dds2 <- DESeq(dds2)
+
+# Obtain results for specific comparisons
+KO2vsWT2 <-results(dds2, contrast=c("genotype","KO","WT"), independentFiltering = TRUE , alpha = 0.05)
+R47HvsWT2<-results(dds2, contrast=c("genotype","R47H","WT"), independentFiltering = TRUE , alpha = 0.05)
+KO2vsR47H <-results(dds2, contrast=c("genotype","R47H","KO"), independentFiltering = TRUE , alpha = 0.05)
+
+# Write the results to a file
+write.table(as.data.frame(KO2vsWT2[order(KO2vsWT2$padj),] ), file="KO_vs_WT_dgeC.txt",sep="\t", quote = FALSE)
+write.table(as.data.frame(R47HvsWT2[order(R47HvsWT2$padj),] ), file="R47H_vs_WT_dge.txt",sep="\t", quote = FALSE)
+write.table(as.data.frame(KO2vsR47H[order(KO2vsR47H$padj),] ), file="R47H_vs_KO2_dge.txt",sep="\t", quote = FALSE)
+
+
+# Plot expression for a single gene by genotype
+plotCounts(dds2, gene="TREM2", intgroup="genotype") # are counts higher in WTs or KOs or R47H
+
+# Plot expression for a single gene by individual
+plotCounts(dds2, gene="TREM2", intgroup="week") #checking if the gene expression patterns are different per week 
+
+
+# Identify the names of the top 30 significantly differentially expressed genes by genotype
+KO2vsWT2_sorted <- KO2vsWT2[order(KO2vsWT2$padj),]
+R47HvsWT2_sorted <- R47HvsWT2[order(R47HvsWT2$padj),]
+KO2vsR47H_sorted <- KO2vsR47H[order(KO2vsR47H$padj),]
+KO2vsWT2_top30 <- head(KO2vsWT2_sorted, n=30)
+R47HvsWT2_top30 <- head(R47HvsWT2_sorted, n=30)
+KO2vsR47H_top30 <-head(KO2vsR47H_sorted, n=30)
+top30_genes_KO2vsWT2 <- rownames(KO2vsWT2_top30)
+top30_genes_KO2vsWT2
+top30_genes_R47HvsWT2 <- rownames(R47HvsWT2_top30)
+top30_genes_R47HvsWT2
+top30_genes_KO2vsR47H <-rownames(KO2vsR47H_top30)
+top30_genes_KO2vsR47H
+
+# Extract rlog-transformed values into a matrix and generate DGE heatmaps that only show specific comparison data
 rlog.dge2 <- rld2[top30_genes_KO2vsWT2,c(1,3,4,6,7,9)] %>% assay
 pheatmap(rlog.dge2, scale="row", main = "Differential Gene Expression KO-2 vs WT-2 (row-based z-score)")
 rlog.dge2B <- rld2[top30_genes_R47HvsWT2,c(2:3,5:6,8:9)] %>% assay
 pheatmap(rlog.dge2B, scale="row",  main = "Differential Gene Expression R47H vs WT-2 (row-based z-score)")
-rlog.dge2C <- rld2[top30_genes_KO2vsR47H ,c(1:2,4:5,7:8)] %>% assay
-pheatmap(rlog.dge2C, scale="row",  main = "Differential Gene Expression KO-2 vs R47H (row-based z-score)")
+
+# Create a tibble dataframe of results
+KO2vsWT2_tb <- KO2vsWT2 %>% data.frame() %>% rownames_to_column(var="gene") %>% as_tibble()
+R47HvsWT2_tb <- R47HvsWT2 %>% data.frame() %>% rownames_to_column(var ="gene") %>% as_tibble()
+
+#create subset dataframe of annotated genes with a significant p-adj value 
+KO2vsWT2_significant <- KO2vsWT2_tb %>% filter(padj <0.05)
+KO2vsWT2_annotated <- KO2vsWT2_tb %>% filter(gene != "" | gene != NA) 
+R47HvsWT2_significant <- R47HvsWT2_tb %>% filter(padj <0.05)
+R47HvsWT2_annotated <- R47HvsWT2_tb %>% filter(gene != "" | gene != NA)
+
+# Obtain logical vector where TRUE values denote padj values < 0.05; mutate() adds new variables and preserves existing ones
+KO2vsWT2_tb <- KO2vsWT2_tb %>% mutate(threshold = padj < 0.05)
+KO2vsWT2_tb <- KO2vsWT2_tb %>% arrange(padj) %>% mutate(genelabels = "")
+KO2vsWT2_tb$genelabels[1:30] <- KO2vsWT2_tb $gene[1:30] #labelling top 30 most significant genes
+KO2vsWT2_tb$severity[KO2vsWT2_tb$log2FoldChange > 0 & KO2vsWT2_tb$padj < 0.05] <- "Upregulated" 
+KO2vsWT2_tb$severity[KO2vsWT2_tb$log2FoldChange < 0 & KO2vsWT2_tb$padj < 0.05] <- "Downregulated"
+KO2vsWT2_tb$severity[KO2vsWT2_tb$padj > 0.05] <- "Not Significant"
+KO2vsWT2_tb$dataset <- "Comparator"
+
+R47HvsWT2_tb <- R47HvsWT2_tb %>% mutate(threshold = padj < 0.05)
+R47HvsWT2_tb <- R47HvsWT2_tb %>% arrange(padj) %>% mutate(genelabels = "")
+R47HvsWT2_tb$genelabels[1:30] <- R47HvsWT2_tb $gene[1:30] #labelling top 30 most significant genesR
+R47HvsWT2_tb$severity[R47HvsWT2_tb$log2FoldChange > 0 & R47HvsWT2_tb$padj < 0.05] <- "Upregulated" 
+R47HvsWT2_tb$severity[R47HvsWT2_tb$log2FoldChange < 0 & R47HvsWT2_tb$padj < 0.05] <- "Downregulated"
+R47HvsWT2_tb$severity[R47HvsWT2_tb$padj > 0.05] <- "Not Significant"
+R47HvsWT2_tb$dataset <- "R47H"
+
+## Create a Volcano plot
+ggplot(KO2vsWT2_tb, aes(x = log2FoldChange, y = -log10(padj))) +
+  geom_point(aes(colour = severity)) +
+  geom_text_repel(aes(label = genelabels,colour = severity)) + #when I colour the labels by severity it changes the legend mark to the letter 'a' 
+  scale_color_manual(values = c("blue","grey","red"), limits=c("Downregulated", "Not Significant", "Upregulated")) +
+  guides(color=guide_legend(override.aes = list(size =3)))+
+  ggtitle("KO-2 vs WT-2 ") +
+  xlab("log2 fold change") + 
+  ylab("-log10 adjusted p-value") +
+  theme(plot.title = element_text(size = rel(1.5), hjust = 0.5),
+        axis.title = element_text(size = rel(1.25))) 
+
+ggplot(R47HvsWT2_tb, aes(x = log2FoldChange, y = -log10(padj))) +
+  geom_point(aes(colour = severity)) +
+  geom_text_repel(aes(label = genelabels,colour = severity)) + #when I colour the labels by severity it changes the legend mark to the letter 'a' 
+  scale_color_manual(values = c("blue","grey","red"), limits=c("Downregulated", "Not Significant", "Upregulated")) +
+  guides(color=guide_legend(override.aes = list(size =3)))+
+  ggtitle("R47H vs WT-2") +
+  xlab("log2 fold change") + 
+  ylab("-log10 adjusted p-value") +
+  theme(plot.title = element_text(size = rel(1.5), hjust = 0.5),
+        axis.title = element_text(size = rel(1.25))) 
+
 ```
 
 ## 6. Gene Data Filtering
@@ -354,7 +488,50 @@ semi_join(x= KOvsWT_justgenes, y=DAM_genes)
 semi_join(x= KOvsWT_justgenes_final, y=DAM_genes) 
 #5 of the DAM genes are either upregulated/downregulated in the Original dataset and the comparator dataset and  significantly in  both datasets
 ```
-Replicate procedures in section 6 for Comparison 2 (KO vs WT and R47H vs WT-2)
+
+### **Replicate procedures in section 6 for Comparison 2 (KO vs WT and R47H vs WT-2)**
+Comparator Code:
+```
+KOvsWTvsR47H_joined_tb <- full_join(x= KOvsWT_significant, y= R47HvsWT2_annotated, join_by(gene)) %>% na.omit(KOvsWTvsR47H_joined_tb)
+KOvsWTvsR47H_log2FC_tb <- KOvsWTvsR47H_joined_tb %>% filter(log2FoldChange.x >0 & log2FoldChange.y>0|log2FoldChange.x<0 &log2FoldChange.y<0)
+KOvsWTvsR47H_log2FC_Padj_tb<- KOvsWTvsR47H_joined_tb %>% filter(log2FoldChange.x >0 & log2FoldChange.y>0|log2FoldChange.x<0 &log2FoldChange.y<0) %>% filter(padj.y<=0.1)
+view(KOvsWTvsR47H_log2FC_Padj_tb)
+
+#allsignificant_joined_tb <- full_join(x= KOvsWT_log2FC_Padj_tb, y= KOvsWTvsR47H_log2FC_Padj_tb, join_by(gene)) %>% na.omit(allsignificant_joined_tb)
+
+
+ggplot(KOvsWTvsR47H_joined_tb, aes(x=log2FoldChange.x, y=log2FoldChange.y)) +
+  geom_point()+
+  xlab("log2FC Primary Dataset (KO vs WT)") + 
+  ylab("log2FC Comparator Dataset (R47H vs WT-2)") +
+  theme(plot.title = element_text(size = rel(1.5), hjust = 0.5),
+        axis.title = element_text(size = rel(1.25))) 
+
+ggplot(KOvsWTvsR47H_log2FC_Padj_tb, aes(x=log2FoldChange.x, y=log2FoldChange.y)) +
+  geom_point()+
+  xlab("log2FC Primary Dataset (KO vs WT)") + 
+  ylab("log2FC Comparator Dataset (R47H vs WT-2)") +
+  theme(plot.title = element_text(size = rel(1.5), hjust = 0.5),
+        axis.title = element_text(size = rel(1.25))) 
+
+all(AD_GWASgenes$Name %in% KOvsWTvsR47H_log2FC_Padj_tb)
+all(KOvsWTvsR47H_log2FC_Padj_tb %in% AD_GWASgenes$Name)
+
+KOvsWTvsR47H_justgenes <- KOvsWTvsR47H_log2FC_tb %>% select(gene)
+semi_join(x= KOvsWTvsR47H_justgenes, y=AD_GWAS_justgenes) %>% print(n=22)
+#22 of the AD genes are either upregulated/downregulated in the Original dataset and the variant dataset
+
+KOvsWTvsR47H_justgenes_final <- KOvsWTvsR47H_log2FC_Padj_tb %>% select(gene)
+semi_join(x= KOvsWTvsR47H_justgenes_final, y=AD_GWAS_justgenes) 
+#6 of the AD genes are either upregulated/downregulated in the Original dataset and the variant dataset and  significantly in the both datasets
+
+semi_join(x= KOvsWTvsR47H_justgenes, y=DAM_genes) 
+#9 of the DAM genes are either upregulated/downregulated in the Original dataset and the variant dataset
+
+semi_join(x= KOvsWTvsR47H_justgenes_final, y=DAM_genes) 
+#2 of the DAM genes are either upregulated/downregulated in the Original dataset and the variant dataset and  significantly in  both datasets
+
+```
 
 ## 7. Functional Enrichment Analysis
 To distinguish which pathways or gene networks the significantly differentially expressed genes were involved in, and their role in the disease phenotype, a functional enrichment analysis, also known as a gene-set enrichment analysis or overrepresentation analysis, was performed on the two final filtered datasets using gProfiler’s g:GOSt tool. 
