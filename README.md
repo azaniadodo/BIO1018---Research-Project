@@ -10,7 +10,7 @@ To ensure suitability for further RNA-Seq processing, the raw FASTQ sequence dat
 
 ###### Tool Used: FastQC - https://www.bioinformatics.babraham.ac.uk/projects/fastqc/INSTALL.txt
 
-#### Step 1: Move all raw fastq files into a new directory called  raw_fastq
+#### Step 1: Move all raw fastq files into a new directory called  raw_fastq 
     mkdir -p /mnt/data/GCB2025/username/raw_fastq/
 #### Step 2: Run FastQC on multiple samples in the  directory (using 4 threads) and send outputs to a new designated directory
     fastqc -t 4 *.fastq.gz --outdir=/mnt/data/GCB2025/username/raw_fastq/FastQC
@@ -109,7 +109,7 @@ Each coordinated-sorted BAM file was resorted by name using Samtools Sort -n. Al
 
 ## In R
 ## Download Packages
-```
+```r
         if (!require("BiocManager", quietly = TRUE)) {
           install.packages("BiocManager") }
 
@@ -161,7 +161,7 @@ Each coordinated-sorted BAM file was resorted by name using Samtools Sort -n. Al
 The raw gene/exon counts obtained from the featureCounts output were normalised for gene expression level variability due to covariates or batch effects. The package DESeq2 v1.46.0 was utilised in R (v4.4.2) via R Studio (v2024.12.1+563) to normalise the counts based on differences in sequencing depth and sample composition for each dataset.
 To assess the overall between-sample and between-replicate similarity and deduce the major sources of variation within the RNA-Seq data, a principal component analysis (PCA) and a hierarchical clustering analysis (HCA) of the regularised-logarithm transformed (rlog) normalised count data were performed for each dataset, using the plotPCA() and pheatmap() functions, respectively. 
 
-```
+```r
 counts <- read.table("featurecounts.txt", header = TRUE)
 View(counts)
 row.names(counts) <- counts$Geneid
@@ -228,7 +228,7 @@ pheatmap(sampleDistMatrix,
 DESeq2 was run on the raw genomic feature counts to identify any differential expression of the genes assigned in the featureCounts file.
 To achieve this, a count matrix and tabular metadata dataframe were created. A design formula was specified to measure differential expression based on the effect of interest — genotype; WT/WT-2, KO/KO-2 or R47H — whilst accounting for covariates of (A) individual sequenced (for the primary dataset) and, (B) the week sequencing was performed (for the comparator dataset). 
 
-```
+```r
 # Run the differential expression pipeline on the raw counts
 dds <- DESeq(dds)
 
@@ -247,7 +247,7 @@ write.table(as.data.frame(KOvsWT[order(KOvsWT$padj),] ), file="KO_vs_WT_dge.txt"
 
 ### 5.3 Visualisation
 The normalised count levels of the GOI — TREM2 — were plotted using the ggplot2() function to assess the differences according to genotype (WT, KO and R47H) for each dataset.  The DGE  levels for each gene were collectively assessed and visualised through a volcano plot of log2fc vs P-adj,  labelled with the Top 30 most significantly differentially expressed genes, using the ggplot() function. The magnitude of DGE change was further visualised by generating a heatmap of the Top 30 significantly differentially expressed genes using the pheatmap() function. These processes were performed on the KO vs WT/ KO-2 vs WT-2 DGE level comparison results, using their respective Top 30 subset of significantly differentially expressed genes; these were derived from the DESeq2 results of the primary and comparator datasets and computed into tibble dataframes. Likewise, the same procedure was carried out for the R47H vs WT-2 DGE level comparison tibble dataframe, using its Top 30 significantly differentially expressed genes.  All data visualisation steps were performed in R/Rstudio, using a significance threshold value of Padj < 0.05
-```
+```r
 # Plot expression for a single gene by genotype
 plotCounts(dds, gene="TREM2", intgroup="genotype") # are counts higher in WTs or KOs
 
@@ -300,12 +300,12 @@ ggplot(KOvsWT_tb, aes(x = log2FoldChange, y = -log10(padj))) +
 - Account for factors of  week and genotype (rather than individual and genotype) during data normalisation and variance analysis steps
 - Obtain DGE results for and visualise comparisons of KO-2 vs WT-2, **and** R47H vs WT-2 after running DESeq
 - **Optional**: Obtain DGE analysis results, Top 30 Most Significantly Differentially Expressed genes for the KO-2 vs R47H comparison and visualise as a DGE Heatmap for further analysis and understanding of gene variant effects
-
+```r
         rlog.dge2C <- rld2[top30_genes_KO2vsR47H ,c(1:2,4:5,7:8)] %>% assay
           pheatmap(rlog.dge2C, scale="row",  main = "Differential Gene Expression KO-2 vs R47H (row-based z-score)")
-  
+ ``` 
 Comparator Code:
-```
+```r
 counts2 <- read.table("featurecounts_comparator.txt", header = TRUE)
 row.names(counts2) <- counts2$Geneid
 counts2 <- counts2[ , -c(1:6) ]
@@ -447,7 +447,7 @@ ggplot(R47HvsWT2_tb, aes(x = log2FoldChange, y = -log10(padj))) +
 ## 6. Gene Data Filtering
 All significantly differentially expressed genes were extracted from each comparison tibble dataframe, i.e. KO vs WT, KO-2 vs WT-2 and R47H vs WT-2, using a significance threshold of P-adj < 0.05. These subset dataframes were combined to create two merged dataframes of significantly differentially expressed genes derived from (1) KO vs WT and KO-2 vs WT-2 comparisons, and (2) KO vs WT and R47H vs WT-2 comparisons. The merged dataframes were filtered again to select only genes that were significantly differentially expressed and showing the same direction of differential expression (+/-log2fc ), i.e. genes significantly upregulated or downregulated in both of the comparison dataframes they were derived from. The two final filtered datasets were searched for known Alzheimer’s susceptibility genes  and DAM-related genes.
 
-```
+```r
 # Join the two tibbles  and filter for only significant annotated genes (Comparison 1)
 KOvsWT_joined_tb <- full_join(x= KOvsWT_significant, y= KO2vsWT2_annotated, join_by(gene)) %>% na.omit(KOvsWT_joined_tb)
 KOvsWT_log2FC_tb <- KOvsWT_joined_tb %>% filter(log2FoldChange.x >0 & log2FoldChange.y>0|log2FoldChange.x<0 &log2FoldChange.y<0) #significsntly differentially expressed genes in both comparisons
@@ -491,7 +491,7 @@ semi_join(x= KOvsWT_justgenes_final, y=DAM_genes)
 
 ### **Replicate procedures in section 6 for Comparison 2 (KO vs WT and R47H vs WT-2)**
 Comparator Code:
-```
+```r
 KOvsWTvsR47H_joined_tb <- full_join(x= KOvsWT_significant, y= R47HvsWT2_annotated, join_by(gene)) %>% na.omit(KOvsWTvsR47H_joined_tb)
 KOvsWTvsR47H_log2FC_tb <- KOvsWTvsR47H_joined_tb %>% filter(log2FoldChange.x >0 & log2FoldChange.y>0|log2FoldChange.x<0 &log2FoldChange.y<0)
 KOvsWTvsR47H_log2FC_Padj_tb<- KOvsWTvsR47H_joined_tb %>% filter(log2FoldChange.x >0 & log2FoldChange.y>0|log2FoldChange.x<0 &log2FoldChange.y<0) %>% filter(padj.y<=0.1)
@@ -538,14 +538,14 @@ To distinguish which pathways or gene networks the significantly differentially 
 Each input list of significantly differentially expressed genes was mapped to functional data sources — Gene Ontology: Biological Processes (GO: BP), KEGG, Reactome and WikiPathways — and statistically significantly enriched biological pathways and processes were identified 
 
 
-#### Step 1: writing final subset of significantly differentially expressed genes for Comparison 1 to a text file
+#### Step 1: Writing final subset of significantly differentially expressed genes for Comparison 1 to a text file using R
 ##### In Primary Dataset
-```
+```r
 KOvsWT_2FC_Padj_justgenes <- KOvsWT_log2FC_Padj_tb$gene
 write(KOvsWT_2FC_Padj_justgenes, file = "KOvsWT_2FC_Padj_justgenes.txt")
 ```
 ##### In Comparator Dataset
-```
+```r
 KOvsWTvsR47H_2FC_Padj_justgenes <- KOvsWTvsR47H_log2FC_Padj_tb$gene
 write(KOvsWTvsR47H_2FC_Padj_justgenes, file = "KOvsWTvsR47H_2FC_Padj_justgenes.txt"
 ```
